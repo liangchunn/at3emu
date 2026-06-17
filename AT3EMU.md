@@ -473,6 +473,10 @@ Extra:
 - Rust 1.85+ (edition 2024; pinned to 1.96.0 via `rust-toolchain.toml`)
 - C compiler (gcc/clang on Linux/macOS, MSVC Build Tools or MinGW on Windows)
 - CMake (automatically used by `unicorn-engine-sys`)
+- LLVM/Clang (**Windows only**) — needed by `unicorn-engine-sys` for `libclang.dll`:
+  ```powershell
+  winget install LLVM.LLVM
+  ```
 
 ### Build
 
@@ -483,6 +487,13 @@ cargo build
 # Release build (fast, optimized)
 cargo build --release
 ```
+
+> **Windows**: Before building, set these environment variables:
+> ```powershell
+> $env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
+> $env:PATH = "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;$env:PATH"
+> ```
+> The unicorn CMake build also needs **symbolic link creation privileges** — run PowerShell **as Administrator** or enable **Developer Mode** (Settings → Privacy & security → For developers → Developer Mode).
 
 The first build compiles Unicorn Engine from ~290K lines of C source. This takes ~45 seconds on a modern machine. Subsequent builds are fast (~0.3s for Rust changes only).
 
@@ -513,7 +524,7 @@ The emulator works on **macOS (ARM64/x86_64), Linux (x86_64/ARM64), and Windows*
 - The emulated code is always 32-bit x86 Linux, regardless of host OS
 - CPU emulation is software-based — no hardware compatibility requirements
 
-The only requirement is a C compiler for building `unicorn-engine-sys`.
+Requirements: a C compiler for building `unicorn-engine-sys`, plus LLVM/Clang on Windows for `libclang.dll` (install via `winget install LLVM.LLVM`).
 
 ---
 

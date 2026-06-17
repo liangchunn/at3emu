@@ -1,7 +1,8 @@
 # at3emu
 
-`at3tool` CPU emulation via ([Unicorn Engine](https://www.unicorn-engine.org/)) to run the original 32bit x86 Linux ELF binary
+`at3tool` CPU emulation via ([Unicorn Engine](https://www.unicorn-engine.org/)) to run the original 32bit x86 Linux ELF binary.
 
+Tested and works on macOS, and Windows (slow).
 
 ```sh
 # encode 16-bit 44.1kHz PCM WAV 
@@ -19,6 +20,10 @@ at3emu -d song.at3 song_decoded.wav
 - **Rust** 1.96.0+ ([rustup.rs](https://rustup.rs))
 - **A C compiler** — gcc/clang on macOS/Linux, or [MSVC Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022) on Windows
 - **CMake** (usually included with build tools; install via `brew install cmake` / `apt install cmake` if missing)
+- **LLVM/Clang** (Windows only) — needed by `unicorn-engine-sys` for `libclang.dll`. Install via:
+  ```powershell
+  winget install LLVM.LLVM
+  ```
 
 ### 2. Get the Sony binaries
 
@@ -39,6 +44,15 @@ git clone <this-repo>
 cd at3tool-emu
 cargo build --release
 ```
+
+> **Windows notes**: `unicorn-engine-sys` needs `libclang.dll` and Ninja.
+> Set these environment variables before building (or add them to your profile):
+> ```powershell
+> $env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
+> $env:PATH = "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;$env:PATH"
+> ```
+> The build also requires **symbolic link creation privileges** (needed by the unicorn CMake build).
+> Run PowerShell **as Administrator** or enable **Developer Mode** (Settings → Privacy & security → For developers → Developer Mode).
 
 ### 4. Run
 
