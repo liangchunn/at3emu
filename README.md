@@ -1,6 +1,6 @@
 # at3emu
 
-at3tool CPU emulation via ([Unicorn Engine](https://www.unicorn-engine.org/)) to run the original 32bit x86 Linux ELF binary
+`at3tool` CPU emulation via ([Unicorn Engine](https://www.unicorn-engine.org/)) to run the original 32bit x86 Linux ELF binary
 
 
 ```sh
@@ -102,3 +102,7 @@ Performance is ~1.17x slower than the native binary (2m17s vs 1m57s for a 4-minu
 ## License
 
 This project is MIT licensed. The Sony `at3tool` and `libatrac.so` binaries are SCE Confidential and must be obtained separately through proper PSP SDK licensing channels. This emulator does not include or distribute them.
+
+
+## TODO
+- [ ] expose nicer core API (right now it's a bit messy to set up everything)

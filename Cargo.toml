@@ -1,8 +1,3 @@
-[package]
-name = "at3emu"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-goblin = "0.10"
-unicorn-engine = { version = "2.1", features = ["arch_x86"] }
+[workspace]
+resolver = "3"
+members = ["crates/at3emu-core", "crates/at3emu"]

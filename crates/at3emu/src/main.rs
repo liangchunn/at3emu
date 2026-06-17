@@ -1,17 +1,14 @@
 use std::env;
 use std::path::PathBuf;
 
-mod emu;
-mod hostcalls;
-
-use emu::Emulator;
+use at3emu_core::Emulator;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
 
     let mut at3tool_path = String::new();
     let mut libatrac_path = String::new();
-    let mut pass_args: Vec<String> = vec![args[0].clone()];
+    let mut pass_args: Vec<String> = vec!["at3tool".into()];
 
     let mut i = 1;
     while i < args.len() {
@@ -37,7 +34,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("  ATRAC3plus:");
                 eprintln!("    32kbps mono  48kbps mono  64kbps mono  96kbps mono  128kbps mono");
                 eprintln!("    48kbps stereo  64kbps stereo  96kbps stereo  128kbps stereo");
-                eprintln!("    160kbps stereo  192kbps stereo  256kbps stereo  320kbps stereo  352kbps stereo");
+                eprintln!(
+                    "    160kbps stereo  192kbps stereo  256kbps stereo  320kbps stereo  352kbps stereo"
+                );
                 return Ok(());
             }
             _ => {
@@ -85,18 +84,19 @@ fn find_binary(relative: &str) -> Result<String, Box<dyn std::error::Error>> {
     let relative_path = std::path::Path::new(relative);
 
     if let Ok(exe) = env::current_exe()
-        && let Some(parent) = exe.parent() {
-            let candidate = parent.join(relative_path);
+        && let Some(parent) = exe.parent()
+    {
+        let candidate = parent.join(relative_path);
+        if candidate.exists() {
+            return Ok(candidate.to_string_lossy().to_string());
+        }
+        if let Some(grandparent) = parent.parent() {
+            let candidate = grandparent.join(relative_path);
             if candidate.exists() {
                 return Ok(candidate.to_string_lossy().to_string());
             }
-            if let Some(grandparent) = parent.parent() {
-                let candidate = grandparent.join(relative_path);
-                if candidate.exists() {
-                    return Ok(candidate.to_string_lossy().to_string());
-                }
-            }
         }
+    }
 
     if let Ok(cwd) = env::current_dir() {
         let candidate = cwd.join(relative_path);

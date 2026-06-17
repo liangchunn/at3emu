@@ -10,25 +10,43 @@ use unicorn_engine::{RegisterX86, Unicorn};
 
 const TRAMPOLINE_SIZE: u64 = 16;
 
+/// Load base for the shared library (`libatrac.so`).
+/// Chosen at 256 MiB to avoid colliding with the executable at `0x08048000`.
 pub const SO_BASE: u64 = 0x10000000;
+/// Base address of the emulated Linux stack.
 pub const STACK_BASE: u64 = 0x70000000;
+/// Size of the emulated stack (16 MiB).
 pub const STACK_SIZE: u64 = 0x01000000;
+/// Base address of the hostcall trampoline page.
 pub const HOSTCALL_BASE: u64 = 0x71000000;
+/// Size of the hostcall trampoline region (1 MiB).
 pub const HOSTCALL_SIZE: u64 = 0x00100000;
+/// Base address of the emulated heap (`brk`-based).
 pub const HEAP_BASE: u64 = 0x72000000;
+/// Size of the emulated heap (128 MiB).
 pub const HEAP_SIZE: u64 = 0x08000000;
+/// Base address of the scratch/temporary buffer region.
 pub const SCRATCH_BASE: u64 = 0x7a000000;
+/// Size of the scratch region (64 MiB).
 pub const SCRATCH_SIZE: u64 = 0x04000000;
 
+/// Emulated process state shared between the emulator and hostcall handlers.
 pub struct EmuState {
+    /// Current `brk` pointer for the heap allocator.
     pub heap_brk: u64,
+    /// Open file handles (both read and write).
     pub files: Vec<EmuFile>,
+    /// Captured stdout from `printf`, `puts`, `fprintf`, etc.
     pub stdout_buf: Vec<u8>,
+    /// Exit code set by `exit()`.
     pub exit_code: Option<i32>,
 }
 
+/// An emulated file handle.
 pub enum EmuFile {
+    /// A file opened for writing — data is buffered and flushed on `fclose`.
     Write(String, Vec<u8>, usize),
+    /// A file opened for reading — data is loaded into memory on `fopen`.
     Read(Vec<u8>, usize),
 }
 
@@ -43,15 +61,25 @@ impl EmuState {
     }
 }
 
+/// A 32-bit x86 Linux emulator that runs ELF binaries via Unicorn CPU emulation.
+///
+/// Loads executables and shared libraries, resolves relocations, intercepts
+/// glibc calls through a hostcall trampoline mechanism, and provides shims
+/// for memory allocation, file I/O, string/math functions, and stdio output.
 pub struct Emulator {
+    /// The Unicorn CPU emulator instance (x86, 32-bit mode).
     pub emu: Unicorn<'static, ()>,
+    /// Shared emulated process state (heap, files, stdout, exit code).
     pub state: Rc<RefCell<EmuState>>,
+    /// Exported symbols from the loaded shared library (name → address).
     pub lib_exports: HashMap<String, u64>,
+    /// Exported symbols from the loaded executable (name → address).
     pub exe_exports: HashMap<String, u64>,
     hostcall_names: Vec<String>,
 }
 
 impl Emulator {
+    /// Creates a new 32-bit x86 emulator with Unicorn.
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let emu = Unicorn::new(Arch::X86, Mode::MODE_32)?;
         Ok(Emulator {
@@ -63,6 +91,8 @@ impl Emulator {
         })
     }
 
+    /// Maps the stack, hostcall trampoline, heap, and scratch regions
+    /// into emulated memory. Must be called before loading any ELFs.
     pub fn map_memory(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let p = Prot::ALL;
         self.emu.mem_map(STACK_BASE, STACK_SIZE, p)?;
@@ -72,6 +102,8 @@ impl Emulator {
         Ok(())
     }
 
+    /// Loads a shared library ELF at `SO_BASE`, populates `lib_exports`,
+    /// and processes PLT relocations. Unresolved PLT entries become hostcalls.
     pub fn load_lib(&mut self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         let data = fs::read(path)?;
         let elf = Elf::parse(&data)?;
@@ -97,6 +129,9 @@ impl Emulator {
         Ok(())
     }
 
+    /// Loads an executable ELF at its absolute virtual addresses (non-PIE),
+    /// populates `exe_exports`, and processes PLT relocations. Returns the
+    /// entry point address (`_start`).
     pub fn load_exe(&mut self, path: &Path) -> Result<u64, Box<dyn std::error::Error>> {
         let data = fs::read(path)?;
         let elf = Elf::parse(&data)?;
@@ -278,6 +313,10 @@ impl Emulator {
         Ok(())
     }
 
+    /// Installs a Unicorn code hook on the hostcall trampoline region.
+    /// When emulated code jumps to a trampoline, the hook reads arguments
+    /// from the stack, dispatches to the appropriate Rust shim, writes
+    /// return values to `EAX`/`ST0`, and redirects execution.
     pub fn setup_hostcall_hook(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let names = self.hostcall_names.clone();
         let state_ref = self.state.clone();
@@ -335,6 +374,9 @@ impl Emulator {
         Ok(())
     }
 
+    /// Starts emulation at the given entry point with the provided arguments.
+    /// Sets up a Linux-compatible stack (argc/argv/envp) and returns the
+    /// exit code. After `run`, stdout can be read from `state.stdout_buf`.
     pub fn run(&mut self, entry: u64, args: &[String]) -> Result<i32, Box<dyn std::error::Error>> {
         let env_strings: Vec<&str> = vec!["HOME=/", "PATH=/usr/bin"];
         let arg_strings: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
@@ -400,8 +442,12 @@ impl Emulator {
     }
 }
 
+/// Result of a hostcall dispatch, telling the code hook how to proceed.
 pub enum HostcallAction {
+    /// Return to the caller with an optional `EAX` value.
     Return(Option<u32>),
+    /// Stop emulation immediately (used for `exit` / `__assert_fail`).
     Stop,
+    /// The handler already redirected execution (used for `__libc_start_main`).
     Skip,
 }

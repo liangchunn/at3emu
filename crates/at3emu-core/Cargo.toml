@@ -1,0 +1,8 @@
+[package]
+name = "at3emu-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+goblin = "0.10"
+unicorn-engine = { version = "2.1", features = ["arch_x86"] }

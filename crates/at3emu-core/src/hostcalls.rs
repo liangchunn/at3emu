@@ -5,6 +5,12 @@ use unicorn_engine::Unicorn;
 
 use crate::emu::{EmuFile, EmuState, HostcallAction, STACK_BASE, STACK_SIZE};
 
+/// Dispatches a glibc call to the appropriate Rust shim.
+///
+/// Returns a `HostcallAction` that tells the code hook how to proceed:
+/// - `Return(val)` — write `val` to `EAX` and return to caller
+/// - `Stop` — stop emulation (for `exit`, `__assert_fail`)
+/// - `Skip` — the handler already redirected execution (for `__libc_start_main`)
 pub fn dispatch(
     state: &mut EmuState,
     name: &str,
@@ -12,15 +18,18 @@ pub fn dispatch(
     emu: &mut Unicorn<'_, ()>,
 ) -> HostcallAction {
     match name {
+        // -- runtime --------------------------------------------------
         "__libc_start_main" => h_libc_start_main(args, emu),
         "__gmon_start__" => HostcallAction::Return(Some(0)),
         "_Jv_RegisterClasses" => HostcallAction::Return(Some(0)),
 
+        // -- memory ---------------------------------------------------
         "malloc" => HostcallAction::Return(Some(h_malloc(state, args))),
         "free" => HostcallAction::Return(Some(0)),
         "calloc" => HostcallAction::Return(Some(h_calloc(state, args))),
         "realloc" => HostcallAction::Return(Some(h_realloc(state, args, emu))),
 
+        // -- string ---------------------------------------------------
         "memcpy" => HostcallAction::Return(Some(h_memcpy(args, emu))),
         "memmove" => HostcallAction::Return(Some(h_memcpy(args, emu))),
         "memset" => HostcallAction::Return(Some(h_memset(args, emu))),
@@ -28,6 +37,7 @@ pub fn dispatch(
         "strcmp" => HostcallAction::Return(Some(h_strcmp(args, emu))),
         "atoi" => HostcallAction::Return(Some(h_atoi(args, emu))),
 
+        // -- file I/O -------------------------------------------------
         "fopen" => HostcallAction::Return(Some(h_fopen(state, args, emu))),
         "fclose" => HostcallAction::Return(Some(h_fclose(state, args))),
         "fread" => HostcallAction::Return(Some(h_fread(state, args, emu))),
@@ -37,17 +47,20 @@ pub fn dispatch(
         "feof" => HostcallAction::Return(Some(h_feof(state, args))),
         "fgetc" => HostcallAction::Return(Some(h_fgetc(state, args))),
 
+        // -- stdio ----------------------------------------------------
         "printf" => HostcallAction::Return(Some(h_printf(args, emu, state))),
         "fprintf" => HostcallAction::Return(Some(h_fprintf(state, args, emu))),
         "puts" => HostcallAction::Return(Some(h_puts(args, emu, state))),
         "putchar" => HostcallAction::Return(Some(h_putchar(args, state))),
 
+        // -- process control ------------------------------------------
         "exit" => {
             let code = args.first().copied().unwrap_or(0) as i32;
             state.exit_code = Some(code);
             HostcallAction::Stop
         }
 
+        // -- math -------------------------------------------------
         "abs" => HostcallAction::Return(Some(h_iabs(args))),
         "labs" => HostcallAction::Return(Some(h_iabs(args))),
         "fabs" => HostcallAction::Return(Some(h_fabs_handler(emu))),
@@ -76,6 +89,10 @@ pub fn dispatch(
     }
 }
 
+// -- runtime helpers -------------------------------------------------------
+
+/// Handles `__libc_start_main` by redirecting execution to `main(argc, argv, envp)`.
+/// Sets up a fresh stack frame and tells the hook to skip (already jumped).
 fn h_libc_start_main(args: &[u32], emu: &mut Unicorn<'_, ()>) -> HostcallAction {
     let main_ptr = args.first().copied().unwrap_or(0) as u64;
     let argc = args.get(1).copied().unwrap_or(0);
@@ -106,6 +123,8 @@ fn h_libc_start_main(args: &[u32], emu: &mut Unicorn<'_, ()>) -> HostcallAction 
 
     HostcallAction::Skip
 }
+
+// -- memory helpers ---------------------------------------------------------
 
 fn h_malloc(state: &mut EmuState, args: &[u32]) -> u32 {
     let size = args.first().copied().unwrap_or(0) as usize;
@@ -148,6 +167,8 @@ fn h_realloc(state: &mut EmuState, args: &[u32], emu: &mut Unicorn<'_, ()>) -> u
     }
     new_ptr
 }
+
+// -- string / memory utilities ----------------------------------------------
 
 fn h_memcpy(args: &[u32], emu: &mut Unicorn<'_, ()>) -> u32 {
     let dst = args.first().copied().unwrap_or(0) as u64;
@@ -219,6 +240,7 @@ fn h_atoi(args: &[u32], emu: &mut Unicorn<'_, ()>) -> u32 {
     s.parse::<i32>().unwrap_or(0) as u32
 }
 
+/// Reads a null-terminated string from emulated memory (max 256 bytes).
 fn read_cstr(emu: &Unicorn<'_, ()>, addr: u64) -> String {
     let mut buf = vec![0u8; 256];
     if emu.mem_read(addr, &mut buf).is_err() {
@@ -229,6 +251,8 @@ fn read_cstr(emu: &Unicorn<'_, ()>, addr: u64) -> String {
         .map(|&b| b as char)
         .collect()
 }
+
+// -- file I/O helpers -------------------------------------------------------
 
 fn h_fopen(state: &mut EmuState, args: &[u32], emu: &mut Unicorn<'_, ()>) -> u32 {
     let path_ptr = args.first().copied().unwrap_or(0) as u64;
@@ -417,6 +441,8 @@ fn h_fgetc(state: &mut EmuState, args: &[u32]) -> u32 {
     }
 }
 
+// -- stdio helpers ----------------------------------------------------------
+
 fn h_printf(args: &[u32], emu: &mut Unicorn<'_, ()>, state: &mut EmuState) -> u32 {
     let fmt_ptr = args.first().copied().unwrap_or(0) as u64;
     let fmt = read_cstr(emu, fmt_ptr);
@@ -463,6 +489,8 @@ fn h_putchar(args: &[u32], state: &mut EmuState) -> u32 {
     c as u32
 }
 
+/// Minimal `printf`-style formatter supporting `%s`, `%d`, `%u`, `%x`,
+/// `%c`, `%p`, `%%`. Width/precision flags are parsed but ignored.
 fn format_string(fmt: &str, args: &[u32], emu: &Unicorn<'_, ()>) -> String {
     let mut result = String::new();
     let mut arg_idx = 0;
@@ -550,11 +578,14 @@ fn format_string(fmt: &str, args: &[u32], emu: &Unicorn<'_, ()>) -> String {
     result
 }
 
+// -- math helpers -----------------------------------------------------------
+
 fn h_iabs(args: &[u32]) -> u32 {
     let val = args.first().copied().unwrap_or(0) as i32;
     val.unsigned_abs()
 }
 
+/// Reads a `f64` from emulated memory at the given address.
 fn read_f64(emu: &Unicorn<'_, ()>, addr: u64) -> f64 {
     let mut buf = [0u8; 8];
     if emu.mem_read(addr, &mut buf).is_ok() {
@@ -564,6 +595,7 @@ fn read_f64(emu: &Unicorn<'_, ()>, addr: u64) -> f64 {
     }
 }
 
+/// Reads a `f32` from emulated memory at the given address.
 fn read_f32(emu: &Unicorn<'_, ()>, addr: u64) -> f32 {
     let mut buf = [0u8; 4];
     if emu.mem_read(addr, &mut buf).is_ok() {
@@ -573,6 +605,7 @@ fn read_f32(emu: &Unicorn<'_, ()>, addr: u64) -> f32 {
     }
 }
 
+/// Writes an `f64` to the x87 `ST0` register (80-bit extended precision).
 fn write_st0(emu: &mut Unicorn<'_, ()>, val: f64) {
     let bytes = f64_to_x87(val);
     if let Ok(()) = emu.reg_write_long(RegisterX86::ST0, &bytes) {
@@ -581,6 +614,10 @@ fn write_st0(emu: &mut Unicorn<'_, ()>, val: f64) {
     emu.reg_write(RegisterX86::ST0, val.to_bits()).ok();
 }
 
+/// Converts an IEEE 754 `f64` to the 80-bit x87 extended-precision format.
+///
+/// Layout (10 bytes): 64-bit mantissa (explicit leading 1), 15-bit exponent
+/// (bias 16383), 1-bit sign.
 fn f64_to_x87(val: f64) -> [u8; 10] {
     if val == 0.0 {
         return [0; 10];

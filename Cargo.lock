@@ -15,6 +15,13 @@ dependencies = [
 name = "at3emu"
 version = "0.1.0"
 dependencies = [
+ "at3emu-core",
+]
+
+[[package]]
+name = "at3emu-core"
+version = "0.1.0"
+dependencies = [
  "goblin",
  "unicorn-engine",
 ]
