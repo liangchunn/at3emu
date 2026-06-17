@@ -8,13 +8,29 @@ Tested and works on macOS, and Windows (slow).
 # show original help
 at3emu
 
-# encode 16-bit 44.1kHz PCM WAV 
+# encode 16-bit 44.1kHz PCM WAV
 # (LP2 = 132kbps, LP4 = 66kbps)
 at3emu -e -br 132 song.wav song.at3
 
 # decode
 at3emu -d song.at3 song_decoded.wav
 ```
+
+## Download
+
+Prebuilt binaries for are available on the [Releases](https://github.com/liangchunn/at3emu/releases) page.
+
+1. Download the prebuilt binary
+2. Place `libatrac.so.1.2.0` and `at3tool` inside a `linux` folder next to the binary
+
+   ```
+   at3emu
+   linux/
+   ├── at3tool
+   └── libatrac.so.1.2.0
+   ```
+
+3. Run the binary. See [Usage](#usage) below for all options.
 
 ## Setup
 
@@ -50,10 +66,12 @@ cargo build --release
 
 > **Windows notes**: `unicorn-engine-sys` needs `libclang.dll` and Ninja.
 > Set these environment variables before building (or add them to your profile):
+>
 > ```powershell
 > $env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
 > $env:PATH = "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;$env:PATH"
 > ```
+>
 > The build also requires **symbolic link creation privileges** (needed by the unicorn CMake build).
 > Run PowerShell **as Administrator** or enable **Developer Mode** (Settings → Privacy & security → For developers → Developer Mode).
 
@@ -120,6 +138,6 @@ Performance is ~1.17x slower than the native binary (2m17s vs 1m57s for a 4-minu
 
 This project is MIT licensed. The Sony `at3tool` and `libatrac.so` binaries are SCE Confidential and must be obtained separately through proper PSP SDK licensing channels. This emulator does not include or distribute them.
 
-
 ## TODO
+
 - [ ] expose nicer core API (right now it's a bit messy to set up everything)
