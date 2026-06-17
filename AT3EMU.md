@@ -43,11 +43,10 @@ The tool is distributed as **pre-built binaries only** (no source code):
 
 ### Key Crates
 
-| Crate                | Version | Purpose                                                                                                              |
-| -------------------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
-| `goblin`             | 0.10    | Pure-Rust ELF parser — reads at3tool and libatrac.so binary headers, segments, symbols, relocations                  |
-| `unicorn-engine`     | 2.1     | CPU emulator based on QEMU's TCG — emulates x86 32-bit instructions including SSE/SSE2/SSE3 required by the DSP code |
-| `unicorn-engine-sys` | 2.1     | Compiles Unicorn's ~290K lines of C from source via `cc-rs` — no system library needed                               |
+| Crate            | Version | Purpose                                                                                                              |
+| ---------------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
+| `goblin`         | 0.10    | Pure-Rust ELF parser — reads at3tool and libatrac.so binary headers, segments, symbols, relocations                  |
+| `unicorn-engine` | 2.1     | CPU emulator based on QEMU's TCG — emulates x86 32-bit instructions including SSE/SSE2/SSE3 required by the DSP code (feature `arch_x86`). Pulls in `unicorn-engine-sys` which compiles ~290K lines of C from source via `cc-rs` — no system library needed |
 
 ---
 
@@ -471,7 +470,7 @@ Extra:
 
 ### Prerequisites
 
-- Rust 1.70+
+- Rust 1.85+ (edition 2024; pinned to 1.96.0 via `rust-toolchain.toml`)
 - C compiler (gcc/clang on Linux/macOS, MSVC Build Tools or MinGW on Windows)
 - CMake (automatically used by `unicorn-engine-sys`)
 
@@ -487,11 +486,16 @@ cargo build --release
 
 The first build compiles Unicorn Engine from ~290K lines of C source. This takes ~45 seconds on a modern machine. Subsequent builds are fast (~0.3s for Rust changes only).
 
+The binary is output to `target/release/at3emu` (or `target/debug/at3emu`).
+
 ### Running
 
 ```bash
 # Binary auto-discovery (looks in ./linux/ next to the executable)
 cargo run --release -- -e -br 66 input.wav output.at3
+
+# Or run the compiled binary directly
+./target/release/at3emu -e -br 66 input.wav output.at3
 
 # Explicit paths
 cargo run --release -- --at3tool ./linux/at3tool --libatrac ./linux/libatrac.so.1.2.0 -e -br 66 input.wav output.at3
@@ -567,15 +571,21 @@ The emulator is only 17% slower than the real binary — impressive considering 
 
 ```
 at3tool-emu/
-├── Cargo.toml              # Rust project config
-├── src/
-│   ├── main.rs             # CLI entry point, argument handling, module declarations
-│   ├── emu.rs              # ELF loader, CPU emulator setup, hostcall dispatch
-│   └── hostcalls.rs        # glibc function shims (malloc, printf, sin, etc.)
+├── Cargo.toml              # Workspace root (resolver="3")
+├── crates/
+│   ├── at3emu/             # CLI binary crate
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       └── main.rs     # CLI entry point, argument parsing, binary auto-discovery
+│   └── at3emu-core/        # Core library crate
+│       ├── Cargo.toml
+│       └── src/
+│           ├── lib.rs      # Library root, re-exports Emulator
+│           ├── emu.rs      # ELF loader, CPU emulator setup, hostcall dispatch
+│           └── hostcalls.rs # glibc function shims (malloc, printf, sin, etc.)
 └── linux/
     ├── at3tool             # Original Sony at3tool binary (32-bit ELF)
-    ├── libatrac.so.1.2.0   # Original Sony libatrac codec (32-bit ELF)
-    └── libatrac.so.1       # Symlink to libatrac.so.1.2.0
+    └── libatrac.so.1.2.0   # Original Sony libatrac codec (32-bit ELF)
 ```
 
 ---
