@@ -5,6 +5,9 @@
 Tested and works on macOS, and Windows (slow).
 
 ```sh
+# show original help
+at3emu
+
 # encode 16-bit 44.1kHz PCM WAV 
 # (LP2 = 132kbps, LP4 = 66kbps)
 at3emu -e -br 132 song.wav song.at3
