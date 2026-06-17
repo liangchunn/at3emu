@@ -20,8 +20,6 @@ jobs:
             target: aarch64-apple-darwin
           - os: macos-15-intel
             target: x86_64-apple-darwin
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
 
     steps:
       - name: Checkout
@@ -41,14 +39,6 @@ jobs:
           cmake --version
           ninja --version || brew install ninja
 
-      # unicorn-engine-sys needs libclang on Windows; LLVM and CMake are
-      # preinstalled on the GitHub-hosted Windows runners.
-      - name: Configure build env (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
-
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }} --bin at3emu
 
@@ -59,16 +49,6 @@ jobs:
           cp "target/${{ matrix.target }}/release/at3emu" dist/
           cp README.md LICENSE* dist/ 2>/dev/null || true
           tar -czf "at3emu-${{ github.ref_name }}-${{ matrix.target }}.tar.gz" -C dist .
-
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/at3emu.exe" dist/
-          if (Test-Path README.md) { Copy-Item README.md dist/ }
-          Get-ChildItem -Path . -Filter "LICENSE*" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/
-          Compress-Archive -Path dist/* -DestinationPath "at3emu-${{ github.ref_name }}-${{ matrix.target }}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
