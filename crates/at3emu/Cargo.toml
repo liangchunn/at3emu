@@ -5,3 +5,5 @@ edition = "2024"
 
 [dependencies]
 at3emu-core = { path = "../at3emu-core" }
+env_logger = "0.11.10"
+log = "0.4.32"

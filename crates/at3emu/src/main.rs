@@ -2,8 +2,10 @@ use std::env;
 use std::path::PathBuf;
 
 use at3emu_core::Emulator;
+use log::info;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let args: Vec<String> = env::args().collect();
 
     let mut at3tool_path = String::new();
@@ -26,15 +28,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             "--list-codecs" => {
-                eprintln!("Supported codecs:");
-                eprintln!("  ATRAC3:");
-                eprintln!(
+                info!("Supported codecs:");
+                info!("  ATRAC3:");
+                info!(
                     "    52kbps mono  66kbps mono  66kbps stereo  105kbps stereo  132kbps stereo"
                 );
-                eprintln!("  ATRAC3plus:");
-                eprintln!("    32kbps mono  48kbps mono  64kbps mono  96kbps mono  128kbps mono");
-                eprintln!("    48kbps stereo  64kbps stereo  96kbps stereo  128kbps stereo");
-                eprintln!(
+                info!("  ATRAC3plus:");
+                info!("    32kbps mono  48kbps mono  64kbps mono  96kbps mono  128kbps mono");
+                info!("    48kbps stereo  64kbps stereo  96kbps stereo  128kbps stereo");
+                info!(
                     "    160kbps stereo  192kbps stereo  256kbps stereo  320kbps stereo  352kbps stereo"
                 );
                 return Ok(());
@@ -53,8 +55,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         libatrac_path = find_binary("linux/libatrac.so.1.2.0")?;
     }
 
-    eprintln!("[at3emu] loading libatrac: {}", libatrac_path);
-    eprintln!("[at3emu] loading at3tool: {}", at3tool_path);
+    info!("loading libatrac: {}", libatrac_path);
+    info!("loading at3tool: {}", at3tool_path);
 
     let mut emu = Emulator::new()?;
     emu.map_memory()?;
@@ -67,7 +69,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     emu.setup_hostcall_hook()?;
 
-    eprintln!("[at3emu] running: {:?}", &pass_args[1..]);
+    info!("running: {:?}", &pass_args[1..]);
     let exit_code = emu.run(entry, &pass_args)?;
 
     let state_ref = emu.state.borrow();

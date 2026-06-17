@@ -1,5 +1,6 @@
 use std::fs;
 
+use log::{error, warn};
 use unicorn_engine::RegisterX86;
 use unicorn_engine::Unicorn;
 
@@ -78,12 +79,12 @@ pub fn dispatch(
         "pow" => HostcallAction::Return(Some(h_pow_handler(emu))),
 
         "__assert_fail" => {
-            eprintln!("[hostcall] __assert_fail called!");
+            error!("__assert_fail called!");
             HostcallAction::Stop
         }
 
         _ => {
-            eprintln!("[hostcall] unknown: {}", name);
+            warn!("unknown: {}", name);
             HostcallAction::Stop
         }
     }
@@ -99,7 +100,7 @@ fn h_libc_start_main(args: &[u32], emu: &mut Unicorn<'_, ()>) -> HostcallAction 
     let argv_ptr = args.get(2).copied().unwrap_or(0) as u64;
 
     if main_ptr == 0 {
-        eprintln!("[hostcall] __libc_start_main: main is null");
+        error!("__libc_start_main: main is null");
         return HostcallAction::Stop;
     }
 
@@ -275,7 +276,7 @@ fn h_fopen(state: &mut EmuState, args: &[u32], emu: &mut Unicorn<'_, ()>) -> u32
                 state.files.len() as u32
             }
             Err(e) => {
-                eprintln!("[hostcall] fopen({}): {}", path, e);
+                warn!("fopen({}): {}", path, e);
                 0
             }
         }

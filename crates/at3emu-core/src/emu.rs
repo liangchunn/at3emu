@@ -5,6 +5,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use goblin::elf::Elf;
+use log::{debug, info, warn};
 use unicorn_engine::unicorn_const::{Arch, Mode, Prot};
 use unicorn_engine::{RegisterX86, Unicorn};
 
@@ -119,8 +120,8 @@ impl Emulator {
 
         self.load_elf(&elf, &data, SO_BASE, false)?;
 
-        eprintln!(
-            "[emu] loaded lib {} ({} exports, {} imports)",
+        info!(
+            "loaded lib {} ({} exports, {} imports)",
             path.file_name().unwrap().to_string_lossy(),
             self.lib_exports.len(),
             self.hostcall_names.len()
@@ -147,8 +148,8 @@ impl Emulator {
 
         self.load_elf(&elf, &data, 0, true)?;
 
-        eprintln!(
-            "[emu] loaded exe {} (entry=0x{:x}, {} symbols)",
+        info!(
+            "loaded exe {} (entry=0x{:x}, {} symbols)",
             path.file_name().unwrap().to_string_lossy(),
             entry,
             self.exe_exports.len()
@@ -329,7 +330,7 @@ impl Emulator {
             move |emu, addr, _size| {
                 let idx = ((addr - HOSTCALL_BASE) / TRAMPOLINE_SIZE) as usize;
                 if idx >= names.len() {
-                    eprintln!("[hostcall] unknown trampoline 0x{:x}", addr);
+                    warn!("unknown trampoline 0x{:x}", addr);
                     emu.emu_stop().ok();
                     return;
                 }
@@ -423,8 +424,8 @@ impl Emulator {
         self.emu.reg_write(RegisterX86::EBP, 0)?;
         self.emu.reg_write(RegisterX86::EIP, entry)?;
 
-        eprintln!(
-            "[emu] jumping to _start at 0x{:x}, argc={}, esp=0x{:x}",
+        debug!(
+            "jumping to _start at 0x{:x}, argc={}, esp=0x{:x}",
             entry, argc, sp
         );
 
