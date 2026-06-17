@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Honors rust-toolchain.toml; just ensure the target is available.
+          toolchain: "1.96.0"
+          targets: ${{ matrix.target }}
+
+      # unicorn-engine builds via CMake; macOS runners ship clang + cmake.
+      - name: Install build tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cmake --version
+          ninja --version || brew install ninja
+
+      # unicorn-engine-sys needs libclang on Windows; LLVM and CMake are
+      # preinstalled on the GitHub-hosted Windows runners.
+      - name: Configure build env (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin at3emu
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/at3emu" dist/
+          cp README.md LICENSE* dist/ 2>/dev/null || true
+          tar -czf "at3emu-${{ github.ref_name }}-${{ matrix.target }}.tar.gz" -C dist .
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/at3emu.exe" dist/
+          if (Test-Path README.md) { Copy-Item README.md dist/ }
+          Get-ChildItem -Path . -Filter "LICENSE*" -ErrorAction SilentlyContinue | Copy-Item -Destination dist/
+          Compress-Archive -Path dist/* -DestinationPath "at3emu-${{ github.ref_name }}-${{ matrix.target }}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: at3emu-${{ matrix.target }}
+          path: |
+            at3emu-*.tar.gz
+            at3emu-*.zip
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/at3emu-*.tar.gz
+            artifacts/at3emu-*.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
