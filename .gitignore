@@ -1,0 +1,6 @@
+/target
+!.gitkeep
+/linux/at3tool
+/linux/libatrac.so.1.2.0
+*.at3
+*.wav
